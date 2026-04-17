@@ -1,0 +1,41 @@
+/* style.qss */
+QMainWindow { 
+    background-color: #FFFFFF; 
+}
+
+QLineEdit {
+    border: 2px solid #E0E0E0;
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+    padding: 12px;
+    font-size: 15px;
+    background-color: #F9F9F9;
+}
+
+QLineEdit:focus {
+    border: 2px solid #6C5CE7;
+    background-color: #FFFFFF;
+}
+
+QPushButton#AddBtn {
+    background-color: #6C5CE7;
+    color: white;
+    border: none;
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
+    padding: 12px 20px;
+    font-weight: bold;
+}
+
+QListWidget {
+    border: none;
+    background-color: transparent;
+}
+
+QListWidget::item {
+    background-color: #FDFDFD;
+    border: 1px solid #F1F1F1;
+    border-radius: 8px;
+    margin-bottom: 5px;
+    padding: 10px;
+}

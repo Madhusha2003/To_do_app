@@ -5,7 +5,7 @@ import json
 import os
 
 # file name
-file_name = "To_do_app/data/tasks.json"
+file_name = "data\\tasks.json"
 # Ensure the folder exists
 folder = os.path.dirname(file_name)
 os.makedirs(folder, exist_ok=True)
