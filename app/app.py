@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import re
 import dateparser
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLineEdit, QPushButton, QListWidget, 
@@ -56,26 +57,53 @@ class ModernSmartTodo(QMainWindow):
         text = self.input_field.text().strip()
         if not text:
             return
-
-        # Smart Parsing (The Logic part)
-        parsed = dateparser.parse(text, settings={'PREFER_DATES_FROM': 'future'})
         
-        info_tag = "[Today]"
-        if parsed:
-            # Check if user specified a time or just a date
-            has_time = any(word in text.lower() for word in [':', 'am', 'pm', 'at'])
-            if has_time:
-                info_tag = f"[{parsed.strftime('%b %d @ %I:%M %p')}]"
-            else:
-                info_tag = f"[{parsed.strftime('%b %d')}]"
+        # find date info if exists
+        date_info = None
+        time_info = None
 
+        # Look for date keywords in the full text
+        date_match = re.search(r'\b(today|tomorrow|next\s+\w+|in\s+\d+\s+\w+|by\s+\w+)\b', text, re.IGNORECASE)
+        
+        # Matches "at 5", "at 5:30", "5pm", but ignores random digits without "at" or "am/pm"
+        time_match = re.search(r'\b(?:at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b', text, re.IGNORECASE)
+        
+        if time_match:
+            time_str = time_match.group(0)
+            parsed_time = dateparser.parse(time_str, settings={'PREFER_DATES_FROM': 'future'})
+            if parsed_time:
+                time_info = parsed_time.strftime('%I:%M %p') # E.g., 05:00 PM
+            
+            # Remove the extracted time string from the text and clean up spaces
+            text = text.replace(time_str, "").strip()
+            text = re.sub(r'\s+', ' ', text)
+
+        if date_match:
+            date_str = date_match.group(0)
+            parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'future'})
+            if parsed_date:
+                date_info = parsed_date.strftime('%b %d, %Y')
+            
+            # Remove the extracted date string from the text and clean up spaces
+            text = text.replace(date_str, "").strip()
+            text = re.sub(r'\s+', ' ', text)
+        
+        # Capitalize the first letter for a cleaner look
+        formatedText = text[0].upper() + text[1:] if text else ""
+
+        # Safely format the tag based on whether date, time, or both were provided
+        tags = [info for info in (date_info, time_info) if info]
+        info_tag = f"[{' | '.join(tags)}] " if tags else ""
+        
         # Create Item
-        display_text = f"{info_tag} {text}"
+        display_text = f"{info_tag}{formatedText}"
         item = QListWidgetItem(display_text)
         
         # Add to list and clear
         self.task_list.insertItem(0, item)
         self.input_field.clear()
+
+
 
     def styleSheet(self):
         return super().styleSheet()

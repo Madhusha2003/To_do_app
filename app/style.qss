@@ -1,6 +1,6 @@
 /* style.qss */
 QMainWindow { 
-    background-color: #FFFFFF; 
+    background-color: #000000; 
 }
 
 QLineEdit {
@@ -9,16 +9,16 @@ QLineEdit {
     border-bottom-left-radius: 12px;
     padding: 12px;
     font-size: 15px;
-    background-color: #F9F9F9;
+    background-color: #333333;
 }
 
 QLineEdit:focus {
-    border: 2px solid #6C5CE7;
-    background-color: #FFFFFF;
+    border: 2px solid #ffffff;
+    background-color: #212121;
 }
 
 QPushButton#AddBtn {
-    background-color: #6C5CE7;
+    background-color: #ac1b44;
     color: white;
     border: none;
     border-top-right-radius: 12px;
@@ -33,8 +33,8 @@ QListWidget {
 }
 
 QListWidget::item {
-    background-color: #FDFDFD;
-    border: 1px solid #F1F1F1;
+    background-color: #7d1d36;
+    border: 1px solid #c3c3c3;
     border-radius: 8px;
     margin-bottom: 5px;
     padding: 10px;
