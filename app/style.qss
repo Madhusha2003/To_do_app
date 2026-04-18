@@ -27,15 +27,30 @@ QPushButton#AddBtn {
     font-weight: bold;
 }
 
+/* Remove the default list styling */
 QListWidget {
+    background-color: transparent;
     border: none;
+    outline: none;
+    padding: 5px;
+}
+
+/* Add space between the invisible items */
+QListWidget::item {
     background-color: transparent;
 }
 
-QListWidget::item {
-    background-color: #7d1d36;
-    border: 1px solid #c3c3c3;
+/* The actual Card styling inside the item */
+#TaskCard {
+    background-color: white;
+    border: 1px solid #dcdde1;
     border-radius: 8px;
-    margin-bottom: 5px;
+}
+
+#TaskCard:hover {
+    background-color: #f0f0f0;
+}
+
+#TaskLayout {
     padding: 10px;
 }

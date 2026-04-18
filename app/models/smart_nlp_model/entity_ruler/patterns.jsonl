@@ -1,0 +1,6 @@
+{"label":"GROCERY","pattern":[{"LOWER":"milk"}]}
+{"label":"GROCERY","pattern":[{"LOWER":"eggs"}]}
+{"label":"GROCERY","pattern":[{"LOWER":"chicken"}]}
+{"label":"GROCERY","pattern":[{"LOWER":"bread"}]}
+{"label":"GROCERY","pattern":[{"LOWER":"apples"}]}
+{"label":"GROCERY","pattern":[{"LOWER":"coffee"}]}
