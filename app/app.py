@@ -8,6 +8,9 @@ from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen,
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor, QFont
 
+# CATEGORIES
+categories = {"GROCERY", "PERSONAL", "WORK", "HEALTH", "TRAVEL", "SHOPPING", "FINANCE", "STUDY", "REMINDER"}
+
 class AILoaderThread(QThread):
     # Signals to send messages and the actual models back to the main app
     progress_update = Signal(str)
@@ -88,8 +91,11 @@ class ModernSmartTodo(QMainWindow):
         date_info = ""
         time_info = ""
         category = ""
+        intent = ""
         if hasattr(self, "task_classifier"):
-            category = self.task_classifier.classify(text.lower()) or ""
+            intent = self.smart_category_select()
+            category = self.text_category_classifier()
+            category = self.compare_intent(intent, category)
 
         # Look for date keywords in the full text
         date_match = re.search(r'\b(today|tomorrow|next\s+\w+|in\s+\d+\s+\w+|by\s+\w+)\b', text, re.IGNORECASE)
@@ -124,9 +130,6 @@ class ModernSmartTodo(QMainWindow):
         tags = [info for info in (date_info, time_info) if info]
         info_tag = f"[{' | '.join(tags)}] " if tags else ""
 
-        # widget select
-        self.smart_widget_select()
-        
         # Create TaskCard
         self.card = TaskCard(formatedText, category, date_info, time_info)
         self.item = QListWidgetItem()
@@ -136,43 +139,84 @@ class ModernSmartTodo(QMainWindow):
         self.input_field.clear()
         self.card.list_item = self.item 
         
-
-    def smart_widget_select(self):
+    def text_category_classifier(self):
         text = self.input_field.text().strip()
-        if not text: return
+        lower_text = text.lower()
+        category = self.task_classifier.classify(lower_text) or ""
+        if category.upper() in categories:
+            print("Found category from classifier", category)
+            return category
+        else:
+            return "UNKNOWN"
+
+
+    def smart_category_select(self):
+        text = self.input_field.text().strip()
+        if not text: return ""
 
         # Let spaCy analyze the sentence
         if not hasattr(self, "nlp"):
-            return
-        doc = self.nlp(text)
+            return ""
+        lower_text = text.lower()
+        doc = self.nlp(lower_text)
         
-        # 1. Check for Grocery Entities
-        # spaCy can find 'NOUNS' that are objects/products
-        is_grocery = False
-        items_found = []
-
+        intent = ""
+        items = []
+        
+        # Search for entities matched by our Spacy EntityRuler patterns
         for ent in doc.ents:
-            if ent.label_ == "GROCERY" or ent.label_ == "PRODUCT":
-                is_grocery = True
-                items_found.append(ent.text)
+            intent = ent.label_
+            items.append(ent.text)
+            #break
 
-        # Even if no specific entity is found, we can check for the verb "buy" 
-        # and the presence of a "noun" (object)
-        if not is_grocery:
-            has_buy_verb = any(token.lemma_ == "buy" for token in doc)
-            if has_buy_verb:
-                is_grocery = True
+        intent = intent if intent in categories else "UNKNOWN"
 
-        # 2. Trigger the correct UI
-        if is_grocery:
-            print(f"Triggering Grocery Widget for: {items_found}")
-            # self.open_grocery_widget(items_found) 
-        else:
-            # Fall back to your TextBlob classifier for general categories
-            category = self.task_classifier.classify(text)
-            print(f"Adding normal task to {category}")
-
+        if intent:
+            print(f"Detected intent '{intent}' for: {items}")
         
+        return intent
+
+    def compare_intent(self, intent, category):
+        # NLP exact matches (intent) take top priority over the general classifier (category)
+        if intent != "UNKNOWN":
+            return intent.upper()
+        elif category != "UNKNOWN":
+            return category.upper()
+        else:
+            return "PERSONAL"
+            
+    def add_task_from_dict(self, data):
+        card = TaskCard(
+            task_name=data.get("task_name", ""),
+            category=data.get("category", ""),
+            date_info=data.get("date_info", ""),
+            time_info=data.get("time_info", ""),
+            sub_items=data.get("sub_items", []),
+            expanded=data.get("expanded", False)
+        )
+        item = QListWidgetItem()
+        item.setSizeHint(card.sizeHint())
+        # To maintain the correct visual order from top-to-bottom after a reversed load
+        self.task_list.insertItem(0, item)
+        self.task_list.setItemWidget(item, card)
+        card.list_item = item
+
+    def closeEvent(self, event):
+        try:
+            from data_manager import save_tasks
+            tasks_data = []
+            # We must iterate from bottom-to-top because insertItem(0) pushes older tasks down!
+            # Or wait, if we read them top-to-bottom, we can reverse it upon load.
+            for i in range(self.task_list.count()):
+                item = self.task_list.item(i)
+                card = self.task_list.itemWidget(item)
+                if card and hasattr(card, "to_dict"):
+                    tasks_data.append(card.to_dict())
+            save_tasks(tasks_data)
+        except Exception as e:
+            print(f"Failed to save tasks: {e}")
+        finally:
+            super().closeEvent(event)
 
     def styleSheet(self):
         return super().styleSheet()
@@ -214,6 +258,13 @@ if __name__ == "__main__":
         style = load_stylesheet("app\\style.qss")
         app.setStyleSheet(style)
         
+        # Load Tasks
+        from data_manager import load_tasks
+        saved_tasks = load_tasks()
+        # the list populates via insert(0, ...), so load in reverse so the original top item is inserted last and physically remains on top!
+        for task_data in reversed(saved_tasks):
+            window.add_task_from_dict(task_data)
+
         splash.finish(window)
         window.show()
         window.statusBar().showMessage("AI Engine: Online | ToDo version 1.0")

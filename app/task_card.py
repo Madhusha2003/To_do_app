@@ -9,8 +9,12 @@ from PySide6.QtGui import QColor
 
 
 class TaskCard(QFrame):
-    def __init__(self, task_name, category, date_info="", time_info=""):
+    def __init__(self, task_name, category, date_info="", time_info="", sub_items=None, expanded=False):
         super().__init__()
+
+        self.task_name = task_name
+        self.date_info = date_info
+        self.time_info = time_info
 
         self.setObjectName("TaskCard")
 
@@ -25,7 +29,7 @@ class TaskCard(QFrame):
         self.list_item = None
 
         self.category = (category or "INBOX").upper()
-        self.expanded = False
+        self.expanded = expanded
 
         # ================= MAIN LAYOUT =================
         self.main_layout = QVBoxLayout(self)
@@ -69,11 +73,55 @@ class TaskCard(QFrame):
         self.extra_layout.setContentsMargins(0, 0, 0, 0)
         self.extra_layout.setSpacing(1)
 
-        self.extra_container.setVisible(False)
+        self.extra_container.setVisible(self.expanded)
         self.main_layout.addWidget(self.extra_container)
 
         # route system (ONLY 2 TYPES)
         self.build_ui()
+        
+        # Load saved data if exists
+        if sub_items:
+            self.load_sub_items(sub_items)
+
+    def load_sub_items(self, sub_items):
+        if self.category == "GROCERY":
+            for item in sub_items:
+                check = QCheckBox(item.get("text", ""))
+                if item.get("checked"):
+                    check.setChecked(True)
+                self.item_list.addWidget(check)
+        else:
+            for item in sub_items:
+                label = QLabel(f"• {item.get('text', '')}")
+                label.setObjectName("GeneralItem")
+                self.general_list.addWidget(label)
+        self._update_size()
+
+    def to_dict(self):
+        data = {
+            "task_name": self.task_name,
+            "category": self.category,
+            "date_info": self.date_info,
+            "time_info": self.time_info,
+            "expanded": self.expanded,
+            "sub_items": []
+        }
+        if self.category == "GROCERY":
+            for i in range(self.item_list.count()):
+                widget = self.item_list.itemAt(i).widget()
+                if isinstance(widget, QCheckBox):
+                    data["sub_items"].append({
+                        "text": widget.text(),
+                        "checked": widget.isChecked()
+                    })
+        else:
+            for i in range(self.general_list.count()):
+                widget = self.general_list.itemAt(i).widget()
+                if isinstance(widget, QLabel) and widget.objectName() == "GeneralItem":
+                    data["sub_items"].append({
+                        "text": widget.text().lstrip("• ")
+                    })
+        return data
 
     # --------------------------------------------------
     # EXPAND / COLLAPSE
