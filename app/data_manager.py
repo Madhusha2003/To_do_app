@@ -20,3 +20,12 @@ def save_tasks(tasks):
             json.dump(tasks, f, indent=4)
     except Exception as e:
         print(f"Error saving tasks: {e}")
+
+def delete_task(task_name):
+    tasks = load_tasks()
+    for task in tasks:
+        if task["task_name"] == task_name:
+            tasks.remove(task)
+            save_tasks(tasks)
+            return True
+    return False

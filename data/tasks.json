@@ -1,5 +1,45 @@
 [
     {
+        "task_name": "Buy ice cream online",
+        "category": "SHOPPING",
+        "date_info": "",
+        "time_info": "",
+        "expanded": false,
+        "sub_items": []
+    },
+    {
+        "task_name": "Go to clinic",
+        "category": "HEALTH",
+        "date_info": "",
+        "time_info": "",
+        "expanded": false,
+        "sub_items": []
+    },
+    {
+        "task_name": "See the doctor",
+        "category": "HEALTH",
+        "date_info": "",
+        "time_info": "",
+        "expanded": false,
+        "sub_items": []
+    },
+    {
+        "task_name": "Go to school",
+        "category": "HEALTH",
+        "date_info": "",
+        "time_info": "",
+        "expanded": false,
+        "sub_items": []
+    },
+    {
+        "task_name": "Work",
+        "category": "WORK",
+        "date_info": "",
+        "time_info": "",
+        "expanded": false,
+        "sub_items": []
+    },
+    {
         "task_name": "H",
         "category": "WORK",
         "date_info": "",

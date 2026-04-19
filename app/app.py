@@ -8,6 +8,9 @@ from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen,
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor, QFont
 
+# CATEGORIES
+categories = {"GROCERY", "PERSONAL", "WORK", "HEALTH", "TRAVEL", "SHOPPING", "FINANCE", "STUDY", "REMINDER"}
+
 class AILoaderThread(QThread):
     # Signals to send messages and the actual models back to the main app
     progress_update = Signal(str)
@@ -91,7 +94,7 @@ class ModernSmartTodo(QMainWindow):
         intent = ""
         if hasattr(self, "task_classifier"):
             intent = self.smart_category_select()
-            category = self.task_classifier.classify(text.lower()) or ""
+            category = self.text_category_classifier()
             category = self.compare_intent(intent, category)
 
         # Look for date keywords in the full text
@@ -136,6 +139,16 @@ class ModernSmartTodo(QMainWindow):
         self.input_field.clear()
         self.card.list_item = self.item 
         
+    def text_category_classifier(self):
+        text = self.input_field.text().strip()
+        lower_text = text.lower()
+        category = self.task_classifier.classify(lower_text) or ""
+        if category.upper() in categories:
+            print("Found category from classifier", category)
+            return category
+        else:
+            return "UNKNOWN"
+
 
     def smart_category_select(self):
         text = self.input_field.text().strip()
@@ -154,10 +167,7 @@ class ModernSmartTodo(QMainWindow):
         for ent in doc.ents:
             intent = ent.label_
             items.append(ent.text)
-            print("word", ent)
-             # Just capture the primary intent for the category
-
-        categories = {"GROCERY", "PERSONAL", "WORK", "HEALTH", "TRAVEL", "SHOPPING", "FINANCE", "STUDY", "REMINDER"}
+            #break
 
         intent = intent if intent in categories else "UNKNOWN"
 
@@ -170,7 +180,7 @@ class ModernSmartTodo(QMainWindow):
         # NLP exact matches (intent) take top priority over the general classifier (category)
         if intent != "UNKNOWN":
             return intent.upper()
-        elif category:
+        elif category != "UNKNOWN":
             return category.upper()
         else:
             return "PERSONAL"
