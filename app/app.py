@@ -27,7 +27,8 @@ class AILoaderThread(QThread):
         self.loading_finished.emit(task_classifier, nlp)
 
 # import custom widgets
-from task_card import TaskCard
+from task_card import TaskCard 
+
 
 class ModernSmartTodo(QMainWindow):
     def __init__(self):
@@ -45,7 +46,7 @@ class ModernSmartTodo(QMainWindow):
 
         # --- Task List ---
         self.task_list_label = QLabel("Your Tasks")
-        self.task_list_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #2d3436;")
+        self.task_list_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
         self.task_list = QListWidget()
         self.task_list.setSpacing(10) # Space between tasks
         self.main_layout.addWidget(self.task_list_label)
@@ -53,6 +54,7 @@ class ModernSmartTodo(QMainWindow):
 
         # --- Input Section (Horizontal) ---
         self.input_container = QHBoxLayout()
+        self.input_container.setContentsMargins(0, 0, 0, 0)
         self.input_container.setSpacing(0) # Join the input and button
 
         self.input_field = QLineEdit()
@@ -85,7 +87,9 @@ class ModernSmartTodo(QMainWindow):
         # find date info if exists
         date_info = ""
         time_info = ""
-        category = self.task_classifier.classify(text.lower()) or ""
+        category = ""
+        if hasattr(self, "task_classifier"):
+            category = self.task_classifier.classify(text.lower()) or ""
 
         # Look for date keywords in the full text
         date_match = re.search(r'\b(today|tomorrow|next\s+\w+|in\s+\d+\s+\w+|by\s+\w+)\b', text, re.IGNORECASE)
@@ -124,18 +128,22 @@ class ModernSmartTodo(QMainWindow):
         self.smart_widget_select()
         
         # Create TaskCard
-        card = TaskCard(formatedText, category, date_info, time_info)
-        item = QListWidgetItem()
-        item.setSizeHint(card.sizeHint())
-        self.task_list.insertItem(0, item)
-        self.task_list.setItemWidget(item, card)
+        self.card = TaskCard(formatedText, category, date_info, time_info)
+        self.item = QListWidgetItem()
+        self.item.setSizeHint(self.card.sizeHint())
+        self.task_list.insertItem(0, self.item)
+        self.task_list.setItemWidget(self.item, self.card)
         self.input_field.clear()
+        self.card.list_item = self.item 
+        
 
     def smart_widget_select(self):
         text = self.input_field.text().strip()
         if not text: return
 
         # Let spaCy analyze the sentence
+        if not hasattr(self, "nlp"):
+            return
         doc = self.nlp(text)
         
         # 1. Check for Grocery Entities
