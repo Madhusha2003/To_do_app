@@ -1,11 +1,33 @@
 from pathlib import Path
 import sys
+import re
 import dateparser
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLineEdit, QPushButton, QListWidget, 
                              QListWidgetItem, QGraphicsDropShadowEffect)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor, QFont
+
+class AILoaderThread(QThread):
+    # Signals to send messages and the actual models back to the main app
+    progress_update = Signal(str)
+    loading_finished = Signal(object, object)  # (task_classifier, nlp)
+
+    def run(self):
+        # 1. Load TextBlob Classifier
+        self.progress_update.emit("Training the brain...")
+        from categorizer import task_classifier
+        
+        # 2. Load spaCy NLP
+        self.progress_update.emit("Waking up spaCy AI...")
+        from item_finder import nlp
+        
+        # 3. Finish
+        self.progress_update.emit("All systems ready!")
+        self.loading_finished.emit(task_classifier, nlp)
+
+# import custom widgets
+from task_card import TaskCard 
 
 
 class ModernSmartTodo(QMainWindow):
@@ -20,10 +42,19 @@ class ModernSmartTodo(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.main_layout = QVBoxLayout(self.central_widget)
         self.main_layout.setContentsMargins(25, 30, 25, 30)
-        self.main_layout.setSpacing(15)
+        self.main_layout.setSpacing(10)
+
+        # --- Task List ---
+        self.task_list_label = QLabel("Your Tasks")
+        self.task_list_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        self.task_list = QListWidget()
+        self.task_list.setSpacing(10) # Space between tasks
+        self.main_layout.addWidget(self.task_list_label)
+        self.main_layout.addWidget(self.task_list, stretch=1)
 
         # --- Input Section (Horizontal) ---
         self.input_container = QHBoxLayout()
+        self.input_container.setContentsMargins(0, 0, 0, 0)
         self.input_container.setSpacing(0) # Join the input and button
 
         self.input_field = QLineEdit()
@@ -37,10 +68,6 @@ class ModernSmartTodo(QMainWindow):
         self.input_container.addWidget(self.add_button)
         
         self.main_layout.addLayout(self.input_container)
-
-        # --- Task List ---
-        self.task_list = QListWidget()
-        self.main_layout.addWidget(self.task_list)
 
         # --- Logic Connections ---
         # Both "Enter" and "Click" trigger the same method
@@ -56,26 +83,96 @@ class ModernSmartTodo(QMainWindow):
         text = self.input_field.text().strip()
         if not text:
             return
-
-        # Smart Parsing (The Logic part)
-        parsed = dateparser.parse(text, settings={'PREFER_DATES_FROM': 'future'})
         
-        info_tag = "[Today]"
-        if parsed:
-            # Check if user specified a time or just a date
-            has_time = any(word in text.lower() for word in [':', 'am', 'pm', 'at'])
-            if has_time:
-                info_tag = f"[{parsed.strftime('%b %d @ %I:%M %p')}]"
-            else:
-                info_tag = f"[{parsed.strftime('%b %d')}]"
+        # find date info if exists
+        date_info = ""
+        time_info = ""
+        category = ""
+        if hasattr(self, "task_classifier"):
+            category = self.task_classifier.classify(text.lower()) or ""
 
-        # Create Item
-        display_text = f"{info_tag} {text}"
-        item = QListWidgetItem(display_text)
+        # Look for date keywords in the full text
+        date_match = re.search(r'\b(today|tomorrow|next\s+\w+|in\s+\d+\s+\w+|by\s+\w+)\b', text, re.IGNORECASE)
         
-        # Add to list and clear
-        self.task_list.insertItem(0, item)
+        # Matches "at 5", "at 5:30", "5pm", but ignores random digits without "at" or "am/pm"
+        time_match = re.search(r'\b(?:at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b', text, re.IGNORECASE)
+        
+        if time_match:
+            time_str = time_match.group(0)
+            parsed_time = dateparser.parse(time_str, settings={'PREFER_DATES_FROM': 'future'})
+            if parsed_time:
+                time_info = parsed_time.strftime('%I:%M %p') # E.g., 05:00 PM
+            
+            # Remove the extracted time string from the text and clean up spaces
+            text = text.replace(time_str, "").strip()
+            text = re.sub(r'\s+', ' ', text)
+
+        if date_match:
+            date_str = date_match.group(0)
+            parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'future'})
+            if parsed_date:
+                date_info = parsed_date.strftime('%b %d, %Y')
+            
+            # Remove the extracted date string from the text and clean up spaces
+            text = text.replace(date_str, "").strip()
+            text = re.sub(r'\s+', ' ', text)
+        
+        # Capitalize the first letter for a cleaner look
+        formatedText = text[0].upper() + text[1:] if text else ""
+
+        # Safely format the tag based on whether date, time, or both were provided
+        tags = [info for info in (date_info, time_info) if info]
+        info_tag = f"[{' | '.join(tags)}] " if tags else ""
+
+        # widget select
+        self.smart_widget_select()
+        
+        # Create TaskCard
+        self.card = TaskCard(formatedText, category, date_info, time_info)
+        self.item = QListWidgetItem()
+        self.item.setSizeHint(self.card.sizeHint())
+        self.task_list.insertItem(0, self.item)
+        self.task_list.setItemWidget(self.item, self.card)
         self.input_field.clear()
+        self.card.list_item = self.item 
+        
+
+    def smart_widget_select(self):
+        text = self.input_field.text().strip()
+        if not text: return
+
+        # Let spaCy analyze the sentence
+        if not hasattr(self, "nlp"):
+            return
+        doc = self.nlp(text)
+        
+        # 1. Check for Grocery Entities
+        # spaCy can find 'NOUNS' that are objects/products
+        is_grocery = False
+        items_found = []
+
+        for ent in doc.ents:
+            if ent.label_ == "GROCERY" or ent.label_ == "PRODUCT":
+                is_grocery = True
+                items_found.append(ent.text)
+
+        # Even if no specific entity is found, we can check for the verb "buy" 
+        # and the presence of a "noun" (object)
+        if not is_grocery:
+            has_buy_verb = any(token.lemma_ == "buy" for token in doc)
+            if has_buy_verb:
+                is_grocery = True
+
+        # 2. Trigger the correct UI
+        if is_grocery:
+            print(f"Triggering Grocery Widget for: {items_found}")
+            # self.open_grocery_widget(items_found) 
+        else:
+            # Fall back to your TextBlob classifier for general categories
+            category = self.task_classifier.classify(text)
+            print(f"Adding normal task to {category}")
+
+        
 
     def styleSheet(self):
         return super().styleSheet()
@@ -89,11 +186,42 @@ def load_stylesheet(path):
         
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    # Force a modern font if available
     app.setFont(QFont("Segoe UI", 10))
-    style = load_stylesheet("app\\style.qss")
-    app.setStyleSheet(style)
 
+    # --- Setup Splash Screen ---
+    from PySide6.QtGui import QPixmap, QPainter
+    pixmap = QPixmap(400, 250)
+    pixmap.fill(QColor("#2d3436")) # Dark slate background
+    
+    splash = QSplashScreen(pixmap)
+    splash.show()
+
+    # ---Initialize Main Window ---
     window = ModernSmartTodo()
-    window.show()
+
+    # --- Setup and Start Loader Thread ---
+    loader = AILoaderThread()
+
+    def update_splash(message):
+        splash.showMessage(message, Qt.AlignBottom | Qt.AlignCenter, Qt.white)
+
+    def on_finished(classifier, nlp_model):
+        # Assign the loaded models
+        window.task_classifier = classifier
+        window.nlp = nlp_model
+        
+        # Load style and transition to main window
+        style = load_stylesheet("app\\style.qss")
+        app.setStyleSheet(style)
+        
+        splash.finish(window)
+        window.show()
+        window.statusBar().showMessage("AI Engine: Online | ToDo version 1.0")
+
+    loader.progress_update.connect(update_splash)
+    loader.loading_finished.connect(on_finished)
+    
+    # Start the "heavy lifting" in the background
+    loader.start()
+
     sys.exit(app.exec())

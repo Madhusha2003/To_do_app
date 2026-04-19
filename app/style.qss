@@ -1,41 +1,192 @@
 /* style.qss */
-QMainWindow { 
-    background-color: #FFFFFF; 
+QMainWindow {
+    background-color: #000000;
 }
 
 QLineEdit {
-    border: 2px solid #E0E0E0;
-    border-top-left-radius: 12px;
-    border-bottom-left-radius: 12px;
-    padding: 12px;
+    border: 2px solid #333333;
+    border-top-left-radius: 16px;
+    border-bottom-left-radius: 16px;
+    padding: 14px 18px;
     font-size: 15px;
-    background-color: #F9F9F9;
+    background-color: #1e1e1e;
+    color: #f5f6fa;
 }
 
 QLineEdit:focus {
-    border: 2px solid #6C5CE7;
-    background-color: #FFFFFF;
+    border: 2px solid #ff4757;
+    background-color: #2f3640;
 }
 
 QPushButton#AddBtn {
-    background-color: #6C5CE7;
+    background-color: #ff4757;
     color: white;
     border: none;
-    border-top-right-radius: 12px;
-    border-bottom-right-radius: 12px;
-    padding: 12px 20px;
-    font-weight: bold;
+    border-top-right-radius: 16px;
+    border-bottom-right-radius: 16px;
+    padding: 14px 24px;
+    font-weight: 800;
+    font-size: 15px;
+}
+
+QPushButton#AddBtn:hover {
+    background-color: #ff6b81;
 }
 
 QListWidget {
-    border: none;
     background-color: transparent;
+    border: none;
+    outline: none;
+    padding: 5px;
 }
 
 QListWidget::item {
-    background-color: #FDFDFD;
-    border: 1px solid #F1F1F1;
+    background-color: transparent;
+}
+
+/* task card */
+QFrame#TaskCard {
+    background: #1e1e1e;
+    border: 1px solid #333333;
+    border-radius: 14px;
+}
+
+/* header */
+QWidget#TaskHeader {
+    padding: 8px 4px;
+}
+
+/* title */
+QLabel#TaskName {
+    font-size: 16px;
+    font-weight: 700;
+    color: #f5f6fa;
+    padding-left: 2px;
+}
+
+/* date */
+QLabel#TaskDate {
+    font-size: 12px;
+    color: #a4b0be;
+    font-weight: 500;
+}
+
+/* category */
+QLabel#TaskCategory {
+    color: white;
+    padding: 4px 12px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+/* inner input inside task card */
+#TaskCard QLineEdit {
+    padding: 8px 12px;
+    color: #f5f6fa;
+    background-color: #2f3640;
     border-radius: 8px;
+    border: 1px solid #57606f;
+    font-size: 13px;
+}
+
+#TaskCard QLineEdit:focus {
+    border: 1px solid #1e90ff;
+    background-color: #353b48;
+}
+
+/* buttons */
+QPushButton#AddItemBtn,
+QPushButton#SaveBtn,
+QPushButton#ClearBtn {
+    padding: 8px 16px;
+    background-color: #ff4757;
+    color: white;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 13px;
+    border: none;
+}
+
+QPushButton#ClearBtn {
+    background-color: #7f8fa6;
+}
+QPushButton#ClearBtn:hover {
+    background-color: #a4b0be;
+}
+
+QPushButton#AddItemBtn:hover,
+QPushButton#SaveBtn:hover {
+    background-color: #ff6b81;
+}
+
+/* shopping list */
+#ShoppingList {
+    background-color: transparent;
+    border: none;
+    outline: none;
+    padding: 5px;
+    color: #f5f6fa;
+}
+
+/* shopping list checkboxes */
+#ShoppingList QCheckBox {
+    font-size: 14px;
+    color: #f5f6fa;
+    font-weight: 500;
+    padding: 8px 12px;
+    background-color: #2f3640;
+    border-radius: 8px;
+    margin-bottom: 4px;
+}
+
+#ShoppingList QCheckBox:hover {
+    background-color: #353b48;
+}
+
+#ShoppingList QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    border: 2px solid #57606f;
+    background: #1e1e1e;
+    margin-right: 10px;
+}
+
+#ShoppingList QCheckBox::indicator:checked {
+    background: #2ed573;
+    border: 2px solid #2ed573;
+}
+
+/* health item */
+QLabel#HealthItem {
+    background-color: #2b3238;
+    border-left: 4px solid #d63031;
+    border-radius: 4px;
+    padding: 8px 10px;
     margin-bottom: 5px;
-    padding: 10px;
+    font-size: 13px;
+    color: #f5f6fa;
+}
+
+/* saved text */
+QLabel#SavedText {
+    background-color: #1a3c40;
+    padding: 8px 10px;
+    border-radius: 6px;
+    color: #f5f6fa;
+    font-size: 13px;
+    border-left: 4px solid #00cec9;
+}
+
+/* general item */
+QLabel#GeneralItem {
+    background-color: #2f3640;
+    border: 1px solid #57606f;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    font-size: 13px;
+    color: #f5f6fa;
 }
