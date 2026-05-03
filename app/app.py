@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 import re
 import dateparser
+from utils import DateTimeExtractor
 from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLineEdit, QPushButton, QListWidget, 
                              QListWidgetItem, QGraphicsDropShadowEffect)
@@ -88,8 +89,6 @@ class ModernSmartTodo(QMainWindow):
             return
         
         # find date info if exists
-        date_info = ""
-        time_info = ""
         category = ""
         intent = ""
         if hasattr(self, "task_classifier"):
@@ -97,31 +96,8 @@ class ModernSmartTodo(QMainWindow):
             category = self.text_category_classifier()
             category = self.compare_intent(intent, category)
 
-        # Look for date keywords in the full text
-        date_match = re.search(r'\b(today|tomorrow|next\s+\w+|in\s+\d+\s+\w+|by\s+\w+)\b', text, re.IGNORECASE)
-        
-        # Matches "at 5", "at 5:30", "5pm", but ignores random digits without "at" or "am/pm"
-        time_match = re.search(r'\b(?:at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b', text, re.IGNORECASE)
-        
-        if time_match:
-            time_str = time_match.group(0)
-            parsed_time = dateparser.parse(time_str, settings={'PREFER_DATES_FROM': 'future'})
-            if parsed_time:
-                time_info = parsed_time.strftime('%I:%M %p') # E.g., 05:00 PM
-            
-            # Remove the extracted time string from the text and clean up spaces
-            text = text.replace(time_str, "").strip()
-            text = re.sub(r'\s+', ' ', text)
-
-        if date_match:
-            date_str = date_match.group(0)
-            parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'future'})
-            if parsed_date:
-                date_info = parsed_date.strftime('%b %d, %Y')
-            
-            # Remove the extracted date string from the text and clean up spaces
-            text = text.replace(date_str, "").strip()
-            text = re.sub(r'\s+', ' ', text)
+        # Extract date and time information using utility function
+        text, date_info, time_info = DateTimeExtractor.extract(text)
         
         # Capitalize the first letter for a cleaner look
         formatedText = text[0].upper() + text[1:] if text else ""
