@@ -29,3 +29,23 @@ def delete_task(task_name):
             save_tasks(tasks)
             return True
     return False
+
+CONFIG_FILE = Path("data/ai_config.json")
+
+def load_ai_config():
+    if not CONFIG_FILE.exists():
+        return {"mode": "local", "provider": "ollama", "model": "qwen2.5", "api_key": ""}
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading ai config: {e}")
+        return {"mode": "local", "provider": "ollama", "model": "qwen2.5", "api_key": ""}
+
+def save_ai_config(config):
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        print(f"Error saving ai config: {e}")
