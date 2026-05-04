@@ -27,20 +27,29 @@ class AIService:
 
     def ask_online(self, prompt):
         try:
+            api_key = self.config.get("api_key")
+            model = self.config.get("model", "gemini-1.5-flash")
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent?key={api_key}"
+            
             headers = {
-                "Authorization": f"Bearer {self.config.get('api_key')}"
+                "Content-Type": "application/json"
             }
-            response = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": self.config.get("model", "gpt-4o-mini"),
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ]
-                }
-            )
-            return response.json()["choices"][0]["message"]["content"]
+            
+            data = {
+                "contents": [{
+                    "parts": [{"text": prompt}]
+                }]
+            }
+            
+            response = requests.post(url, headers=headers, json=data)
+            response_json = response.json()
+            
+            if "candidates" in response_json:
+                return response_json["candidates"][0]["content"]["parts"][0]["text"]
+            else:
+                error_msg = response_json.get("error", {}).get("message", "Unknown error")
+                return f"Gemini Error: {error_msg}"
+                
         except Exception as e:
             return f"Online AI Error: {e}"
 

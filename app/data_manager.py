@@ -35,13 +35,13 @@ CONFIG_FILE = BASE_DIR / "data" / "ai_config.json"
 
 def load_ai_config():
     if not CONFIG_FILE.exists():
-        return {"mode": "local", "provider": "ollama", "model": "qwen2.5", "api_key": ""}
+        return {"mode": "local", "provider": "gemini", "model": "qwen2.5", "api_key": ""}
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         print(f"Error loading ai config: {e}")
-        return {"mode": "local", "provider": "ollama", "model": "qwen2.5", "api_key": ""}
+        return {"mode": "local", "provider": "gemini", "model": "qwen2.5", "api_key": ""}
 
 def save_ai_config(config):
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)

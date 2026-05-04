@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import re
+import requests
 import dateparser
 from utils import DateTimeExtractor
 from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen, QWidget, QVBoxLayout, 
@@ -30,97 +31,8 @@ class AILoaderThread(QThread):
 from task_card import TaskCard
 from data_manager import load_ai_config, save_ai_config
 from ai_service import AIService, build_prompt
-
-class AIPanelDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("AI Assistant Settings")
-        self.setMinimumWidth(300)
-        self.config = load_ai_config()
-
-        layout = QVBoxLayout(self)
-
-        self.mode_group = QButtonGroup(self)
-        self.local_radio = QRadioButton("Local (Ollama)")
-        self.online_radio = QRadioButton("Online (OpenAI / Gemini)")
-        self.mode_group.addButton(self.local_radio)
-        self.mode_group.addButton(self.online_radio)
-
-        if self.config.get("mode") == "local":
-            self.local_radio.setChecked(True)
-            self.info_label = QLabel("""
-            Local Mode:
-            - Uses Ollama on your PC
-            - Requires installed model
-            """)
-            self.info_label.setStyleSheet("color: gray; font-size: 10px;")
-            layout.insertWidget(0, self.info_label)
-        else:
-            self.online_radio.setChecked(True)
-            self.info_label = QLabel("""
-            Online Mode:
-            - Uses OpenAI / Gemini API
-            - Requires API key
-            """)
-            self.info_label.setStyleSheet("color: gray; font-size: 10px;")
-            layout.insertWidget(0, self.info_label)
-            
-        layout.addWidget(QLabel("Mode:"))
-        layout.addWidget(self.local_radio)
-        layout.addWidget(self.online_radio)
-        layout.addWidget(self.info_label)
-
-        self.form_layout = QFormLayout()
-        
-        self.model_combo = QComboBox()
-        
-        # Fetch models from Ollama
-        import requests
-        try:
-            response = requests.get("http://localhost:11434/api/tags", timeout=2)
-            models = [m["name"] for m in response.json().get("models", [])]
-            if not models:
-                models = ["No models found."]
-        except Exception:
-            models = ["No models found."]
-            
-        self.model_combo.addItems(models)
-        
-        saved_model = self.config.get("model", "")
-        if saved_model in models:
-            self.model_combo.setCurrentText(saved_model)
-        elif models and models[0] != "No models found.":
-            self.model_combo.setCurrentText(models[0])
-        
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setText(self.config.get("api_key", ""))
-        self.api_key_input.setEchoMode(QLineEdit.Password)
-        
-        self.provider_combo = QComboBox()
-        self.provider_combo.addItems(["openai", "gemini"])
-        self.provider_combo.setCurrentText(self.config.get("provider", "openai"))
-
-        self.form_layout.addRow("Model (Local):", self.model_combo)
-        self.form_layout.addRow("Provider (Online):", self.provider_combo)
-        self.form_layout.addRow("API Key (Online):", self.api_key_input)
-        
-        layout.addLayout(self.form_layout)
-
-        btn_layout = QHBoxLayout()
-        self.save_btn = QPushButton("Save")
-        btn_layout.addWidget(self.save_btn)
-        layout.addLayout(btn_layout)
-
-        self.save_btn.clicked.connect(self.save_settings)
-
-    def save_settings(self):
-        self.config["mode"] = "local" if self.local_radio.isChecked() else "online"
-        self.config["model"] = self.model_combo.currentText()
-        self.config["api_key"] = self.api_key_input.text()
-        self.config["provider"] = self.provider_combo.currentText()
-        save_ai_config(self.config)
-        QMessageBox.information(self, "Saved", "Settings saved successfully!")
-        self.accept()
+from ai_settings_window import AIPanelDialog
+from nova_window import NovaResponseDialog
 
 
 class ModernSmartTodo(QMainWindow):
@@ -248,7 +160,11 @@ class ModernSmartTodo(QMainWindow):
         response = service.ask(prompt)
         
         self.statusBar().showMessage("AI Engine: Online | ToDo version 1.0")
-        QMessageBox.information(self, "✨ Nova Says", response)
+        
+        # Display the response in the new Nova window
+        dialog = NovaResponseDialog(self, response_text=response)
+        dialog.exec()
+        
         self.ai_input.clear()
 
     def add_task_logic(self):
