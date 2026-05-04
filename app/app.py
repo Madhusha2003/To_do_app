@@ -1,10 +1,12 @@
 from pathlib import Path
 import sys
 import re
+import requests
 import dateparser
+from utils import DateTimeExtractor
 from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLineEdit, QPushButton, QListWidget, 
-                             QListWidgetItem, QGraphicsDropShadowEffect)
+                             QListWidgetItem, QGraphicsDropShadowEffect, QDialog, QRadioButton, QButtonGroup, QFormLayout, QComboBox, QMessageBox)
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor, QFont
 
@@ -14,23 +16,23 @@ categories = {"GROCERY", "PERSONAL", "WORK", "HEALTH", "TRAVEL", "SHOPPING", "FI
 class AILoaderThread(QThread):
     # Signals to send messages and the actual models back to the main app
     progress_update = Signal(str)
-    loading_finished = Signal(object, object)  # (task_classifier, nlp)
+    loading_finished = Signal(object)  # (task_classifier)
 
     def run(self):
-        # 1. Load TextBlob Classifier
-        self.progress_update.emit("Training the brain...")
+        # 1. Load Logistic Regression Categorizer
+        self.progress_update.emit("Loading Logistic Brain...")
         from categorizer import task_classifier
         
-        # 2. Load spaCy NLP
-        self.progress_update.emit("Waking up spaCy AI...")
-        from item_finder import nlp
-        
-        # 3. Finish
+        # 2. Finish
         self.progress_update.emit("All systems ready!")
-        self.loading_finished.emit(task_classifier, nlp)
+        self.loading_finished.emit(task_classifier)
 
 # import custom widgets
-from task_card import TaskCard 
+from task_card import TaskCard
+from data_manager import load_ai_config, save_ai_config
+from ai_service import AIService, build_prompt
+from ai_settings_window import AIPanelDialog
+from nova_window import NovaResponseDialog
 
 
 class ModernSmartTodo(QMainWindow):
@@ -72,56 +74,111 @@ class ModernSmartTodo(QMainWindow):
         
         self.main_layout.addLayout(self.input_container)
 
+        # --- Assistant Section ---
+        self.assistant_layout = QHBoxLayout()
+        self.assistant_layout.setContentsMargins(0, 0, 0, 0)
+        self.assistant_layout.setSpacing(10)
+        
+        self.ai_input = QLineEdit()
+        self.ai_input.setPlaceholderText("Ask Nova about your tasks...")
+        
+        self.ask_nova_btn = QPushButton("✨ Ask")
+        self.ask_nova_btn.setCursor(Qt.PointingHandCursor)
+        self.ask_nova_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6c5ce7;
+                color: white;
+                border-radius: 15px;
+                padding: 8px 20px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #a29bfe;
+            }
+        """)
+
+        self.settings_btn = QPushButton("⚙️")
+        self.settings_btn.setToolTip("AI Settings")
+        self.settings_btn.setCursor(Qt.PointingHandCursor)
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                font-size: 20px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+                border-radius: 15px;
+            }
+        """)
+        
+        self.assistant_layout.addWidget(self.ai_input, stretch=1)
+        self.assistant_layout.addWidget(self.ask_nova_btn)
+        self.assistant_layout.addWidget(self.settings_btn)
+        self.main_layout.addLayout(self.assistant_layout)
+
         # --- Logic Connections ---
-        # Both "Enter" and "Click" trigger the same method
         self.input_field.returnPressed.connect(self.add_task_logic)
         self.add_button.clicked.connect(self.add_task_logic)
+        self.ai_input.returnPressed.connect(self.ask_nova)
+        self.ask_nova_btn.clicked.connect(self.ask_nova)
+        self.settings_btn.clicked.connect(self.open_settings)
 
         # Subtle Shadow for the input bar
         shadow = QGraphicsDropShadowEffect(blurRadius=10, xOffset=0, yOffset=3)
         shadow.setColor(QColor(0, 0, 0, 15))
         self.input_field.setGraphicsEffect(shadow)
 
+    def open_settings(self):
+        dialog = AIPanelDialog(self)
+        dialog.exec()
+
+    def ask_nova(self):
+        user_prompt = self.ai_input.text().strip()
+        if not user_prompt:
+            user_prompt = "Tell me what to do today and why in a short, encouraging message."
+            
+        from data_manager import load_ai_config
+        config = load_ai_config()
+        
+        # Read current tasks from the UI
+        tasks = []
+        for i in range(self.task_list.count()):
+            item = self.task_list.item(i)
+            card = self.task_list.itemWidget(item)
+            if card and hasattr(card, "to_dict"):
+                tasks.append(card.to_dict())
+                
+        prompt = build_prompt(tasks, user_prompt)
+        service = AIService(config)
+        
+        # Simple synchronous call for now as requested
+        self.statusBar().showMessage("Nova is thinking...")
+        QApplication.processEvents() # Force UI update
+        
+        response = service.ask(prompt)
+        
+        self.statusBar().showMessage("AI Engine: Online | ToDo version 1.0")
+        
+        # Display the response in the new Nova window
+        dialog = NovaResponseDialog(self, response_text=response)
+        dialog.exec()
+        
+        self.ai_input.clear()
+
     def add_task_logic(self):
         text = self.input_field.text().strip()
         if not text:
             return
         
-        # find date info if exists
-        date_info = ""
-        time_info = ""
-        category = ""
-        intent = ""
+        # find category info if classifier exists
+        category = "PERSONAL"
         if hasattr(self, "task_classifier"):
-            intent = self.smart_category_select()
-            category = self.text_category_classifier()
-            category = self.compare_intent(intent, category)
+            category = self.text_category_classifier() or "PERSONAL"
 
-        # Look for date keywords in the full text
-        date_match = re.search(r'\b(today|tomorrow|next\s+\w+|in\s+\d+\s+\w+|by\s+\w+)\b', text, re.IGNORECASE)
-        
-        # Matches "at 5", "at 5:30", "5pm", but ignores random digits without "at" or "am/pm"
-        time_match = re.search(r'\b(?:at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b', text, re.IGNORECASE)
-        
-        if time_match:
-            time_str = time_match.group(0)
-            parsed_time = dateparser.parse(time_str, settings={'PREFER_DATES_FROM': 'future'})
-            if parsed_time:
-                time_info = parsed_time.strftime('%I:%M %p') # E.g., 05:00 PM
-            
-            # Remove the extracted time string from the text and clean up spaces
-            text = text.replace(time_str, "").strip()
-            text = re.sub(r'\s+', ' ', text)
-
-        if date_match:
-            date_str = date_match.group(0)
-            parsed_date = dateparser.parse(date_str, settings={'PREFER_DATES_FROM': 'future'})
-            if parsed_date:
-                date_info = parsed_date.strftime('%b %d, %Y')
-            
-            # Remove the extracted date string from the text and clean up spaces
-            text = text.replace(date_str, "").strip()
-            text = re.sub(r'\s+', ' ', text)
+        # Extract date and time information using utility function
+        text, date_info, time_info = DateTimeExtractor.extract(text)
         
         # Capitalize the first letter for a cleaner look
         formatedText = text[0].upper() + text[1:] if text else ""
@@ -132,55 +189,41 @@ class ModernSmartTodo(QMainWindow):
 
         # Create TaskCard
         self.card = TaskCard(formatedText, category, date_info, time_info)
+        self.card.deleted.connect(self.delete_task) # Connect delete signal
         self.item = QListWidgetItem()
         self.item.setSizeHint(self.card.sizeHint())
         self.task_list.insertItem(0, self.item)
         self.task_list.setItemWidget(self.item, self.card)
         self.input_field.clear()
         self.card.list_item = self.item 
+        self.save_current_tasks() # Auto-save
+        
+    def delete_task(self, card):
+        # Find item in list
+        row = self.task_list.row(card.list_item)
+        if row != -1:
+            self.task_list.takeItem(row)
+            self.save_current_tasks() # Auto-save
+            
+    def save_current_tasks(self):
+        try:
+            from data_manager import save_tasks
+            tasks_data = []
+            for i in range(self.task_list.count()):
+                item = self.task_list.item(i)
+                card = self.task_list.itemWidget(item)
+                if card and hasattr(card, "to_dict"):
+                    tasks_data.append(card.to_dict())
+            save_tasks(tasks_data)
+        except Exception as e:
+            print(f"Failed to save tasks: {e}")
         
     def text_category_classifier(self):
         text = self.input_field.text().strip()
         lower_text = text.lower()
-        category = self.task_classifier.classify(lower_text) or ""
+        category = self.task_classifier.classify(lower_text) or "PERSONAL"
         if category.upper() in categories:
             print("Found category from classifier", category)
-            return category
-        else:
-            return "UNKNOWN"
-
-
-    def smart_category_select(self):
-        text = self.input_field.text().strip()
-        if not text: return ""
-
-        # Let spaCy analyze the sentence
-        if not hasattr(self, "nlp"):
-            return ""
-        lower_text = text.lower()
-        doc = self.nlp(lower_text)
-        
-        intent = ""
-        items = []
-        
-        # Search for entities matched by our Spacy EntityRuler patterns
-        for ent in doc.ents:
-            intent = ent.label_
-            items.append(ent.text)
-            #break
-
-        intent = intent if intent in categories else "UNKNOWN"
-
-        if intent:
-            print(f"Detected intent '{intent}' for: {items}")
-        
-        return intent
-
-    def compare_intent(self, intent, category):
-        # NLP exact matches (intent) take top priority over the general classifier (category)
-        if intent != "UNKNOWN":
-            return intent.upper()
-        elif category != "UNKNOWN":
             return category.upper()
         else:
             return "PERSONAL"
@@ -194,6 +237,7 @@ class ModernSmartTodo(QMainWindow):
             sub_items=data.get("sub_items", []),
             expanded=data.get("expanded", False)
         )
+        card.deleted.connect(self.delete_task) # Connect delete signal
         item = QListWidgetItem()
         item.setSizeHint(card.sizeHint())
         # To maintain the correct visual order from top-to-bottom after a reversed load
@@ -202,30 +246,17 @@ class ModernSmartTodo(QMainWindow):
         card.list_item = item
 
     def closeEvent(self, event):
-        try:
-            from data_manager import save_tasks
-            tasks_data = []
-            # We must iterate from bottom-to-top because insertItem(0) pushes older tasks down!
-            # Or wait, if we read them top-to-bottom, we can reverse it upon load.
-            for i in range(self.task_list.count()):
-                item = self.task_list.item(i)
-                card = self.task_list.itemWidget(item)
-                if card and hasattr(card, "to_dict"):
-                    tasks_data.append(card.to_dict())
-            save_tasks(tasks_data)
-        except Exception as e:
-            print(f"Failed to save tasks: {e}")
-        finally:
-            super().closeEvent(event)
+        self.save_current_tasks()
+        super().closeEvent(event)
 
     def styleSheet(self):
         return super().styleSheet()
     
-def load_stylesheet(path):
-    style_file = Path(path)
+def load_stylesheet():
+    style_file = Path(__file__).parent / "style.qss"
     if style_file.exists():
         return style_file.read_text()
-    print(f"Warning: {path} not found!")
+    print(f"Warning: {style_file} not found!")
     return ""    
         
 if __name__ == "__main__":
@@ -249,13 +280,12 @@ if __name__ == "__main__":
     def update_splash(message):
         splash.showMessage(message, Qt.AlignBottom | Qt.AlignCenter, Qt.white)
 
-    def on_finished(classifier, nlp_model):
-        # Assign the loaded models
+    def on_finished(classifier):
+        # Assign the loaded model
         window.task_classifier = classifier
-        window.nlp = nlp_model
         
         # Load style and transition to main window
-        style = load_stylesheet("app\\style.qss")
+        style = load_stylesheet()
         app.setStyleSheet(style)
         
         # Load Tasks

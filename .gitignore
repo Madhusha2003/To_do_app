@@ -1,1 +1,8 @@
 .venv
+app/data/
+__pycache__/
+*.py[cod]
+*$py.class
+
+app/data/ai_config.json
+app/data/tasks.json

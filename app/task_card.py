@@ -9,6 +9,8 @@ from PySide6.QtGui import QColor
 
 
 class TaskCard(QFrame):
+    deleted = Signal(object)
+    
     def __init__(self, task_name, category, date_info="", time_info="", sub_items=None, expanded=False):
         super().__init__()
 
@@ -63,6 +65,26 @@ class TaskCard(QFrame):
         )
         self.header_layout.addWidget(self.cat_label)
 
+        self.delete_btn = QPushButton("🗑️")
+        self.delete_btn.setObjectName("DeleteBtn")
+        self.delete_btn.setToolTip("Delete Task")
+        self.delete_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                font-size: 16px;
+                padding: 0;
+                margin: 0;
+            }
+            QPushButton:hover {
+                background: #ff7675;
+                border-radius: 4px;
+            }
+        """)
+        self.delete_btn.setCursor(Qt.PointingHandCursor)
+        self.delete_btn.clicked.connect(self._on_delete)
+        self.header_layout.addWidget(self.delete_btn)
+
         self.main_layout.addWidget(self.header)
 
         self.header.mousePressEvent = self.toggle_expand
@@ -82,6 +104,9 @@ class TaskCard(QFrame):
         # Load saved data if exists
         if sub_items:
             self.load_sub_items(sub_items)
+
+    def _on_delete(self):
+        self.deleted.emit(self)
 
     def load_sub_items(self, sub_items):
         if self.category == "GROCERY":
@@ -242,11 +267,14 @@ class TaskCard(QFrame):
     # --------------------------------------------------
     def get_color(self, cat):
         colors = {
-            "WORK": "#0984e3",
-            "PERSONAL": "#00b894",
-            "HEALTH": "#d63031",
-            "SOCIAL": "#6c5ce7",
-            "GROCERY": "#f39c12",
-            "SHOPPING": "#f39c12"
+            "WORK": "#0984e3",       # Blue
+            "PERSONAL": "#00b894",   # Green
+            "HEALTH": "#d63031",     # Red
+            "TRAVEL": "#e17055",     # Orange-ish
+            "SHOPPING": "#f1c40f",   # Yellow
+            "GROCERY": "#f39c12",    # Dark Yellow
+            "FINANCE": "#27ae60",    # Emerald
+            "STUDY": "#6c5ce7",      # Purple
+            "REMINDER": "#fab1a0"    # Peach
         }
-        return colors.get(cat, "#b2bec3")
+        return colors.get(cat.upper(), "#b2bec3")
