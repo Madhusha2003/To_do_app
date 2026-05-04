@@ -1,7 +1,8 @@
 import json
 from pathlib import Path
 
-DATA_FILE = Path("data/tasks.json")
+BASE_DIR = Path(__file__).resolve().parent
+DATA_FILE = BASE_DIR / "data" / "tasks.json"
 
 def load_tasks():
     if not DATA_FILE.exists():
@@ -30,7 +31,7 @@ def delete_task(task_name):
             return True
     return False
 
-CONFIG_FILE = Path("data/ai_config.json")
+CONFIG_FILE = BASE_DIR / "data" / "ai_config.json"
 
 def load_ai_config():
     if not CONFIG_FILE.exists():
