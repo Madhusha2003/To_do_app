@@ -48,12 +48,27 @@ class AIPanelDialog(QDialog):
 
         if self.config.get("mode") == "local":
             self.local_radio.setChecked(True)
+            self.info_label = QLabel("""
+            Local Mode:
+            - Uses Ollama on your PC
+            - Requires installed model
+            """)
+            self.info_label.setStyleSheet("color: gray; font-size: 10px;")
+            layout.insertWidget(0, self.info_label)
         else:
             self.online_radio.setChecked(True)
-
+            self.info_label = QLabel("""
+            Online Mode:
+            - Uses OpenAI / Gemini API
+            - Requires API key
+            """)
+            self.info_label.setStyleSheet("color: gray; font-size: 10px;")
+            layout.insertWidget(0, self.info_label)
+            
         layout.addWidget(QLabel("Mode:"))
         layout.addWidget(self.local_radio)
         layout.addWidget(self.online_radio)
+        layout.addWidget(self.info_label)
 
         self.form_layout = QFormLayout()
         

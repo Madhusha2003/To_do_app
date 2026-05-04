@@ -45,14 +45,23 @@ class AIService:
             return f"Online AI Error: {e}"
 
 def build_prompt(tasks, user_prompt=""):
-    text = "You are a productivity assistant.\n\nTasks:\n"
+    text = """
+You are Nova, a productivity AI assistant.
+
+Your job:
+- Prioritize tasks
+- Suggest what to do first
+- Be short and clear
+- Focus on urgency and importance
+
+TASK LIST:
+"""
+
     for t in tasks:
-        if isinstance(t, dict):
-            title = t.get("task_name", "")
-            category = t.get("category", "")
-            text += f"- {title} (category: {category})\n"
-        else:
-            text += f"- {t.task_name} (category: {t.category})\n"
-    
-    text += f"\n{user_prompt}"
+        text += f"- {t['task_name']} | {t.get('category','')} | {t.get('date_info','')}\n"
+
+    text += f"\nUser request: {user_prompt}\n"
+
+    text += "\nGive a simple action plan for today."
+
     return text

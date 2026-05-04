@@ -1,5 +1,21 @@
 [
     {
+        "task_name": "Go to gym",
+        "category": "HEALTH",
+        "date_info": "May 04, 2026",
+        "time_info": "06:00 PM",
+        "expanded": false,
+        "sub_items": []
+    },
+    {
+        "task_name": "Finish work report",
+        "category": "WORK",
+        "date_info": "May 05, 2026",
+        "time_info": "08:00 PM",
+        "expanded": false,
+        "sub_items": []
+    },
+    {
         "task_name": "Buy milk",
         "category": "GROCERY",
         "date_info": "May 04, 2026",
