@@ -112,13 +112,6 @@ Categories:
 - STUDY = school, learning, homework
 - REMINDER = general reminders
 
-Examples:
-"go shopping" -> SHOPPING
-"buy groceries" -> GROCERY
-"pay electricity bill" -> FINANCE
-"study math" -> STUDY
-"gym workout" -> HEALTH
-"book flight ticket" -> TRAVEL
 
 Task:
 "{text}"
@@ -127,8 +120,9 @@ Rules:
 - Focus on meaning
 - "shopping" means SHOPPING unless groceries/food
 - "study" only for education
+- Only use given categories
 - Output ONLY JSON
-- No extra text
+- No edited text
 
 JSON:
 {{"category":"CATEGORY","task_name":"cleaned task"}}
@@ -147,7 +141,7 @@ Output ONLY this JSON format and nothing else:
 {{
   "category": "CATEGORY_NAME",
   "task_name": "Task without date/time words",
-  "date_info": "MMM DD, YYYY" (or empty string if none),
+  "date_info": "MMM DD, YYYY" (ALWAYS provide today's date if no date is mentioned in input),
   "time_info": "HH:MM AM/PM" (or empty string if none)
 }}
 """

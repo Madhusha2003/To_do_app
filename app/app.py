@@ -3,6 +3,7 @@ import sys
 import re
 import requests
 import dateparser
+from datetime import datetime
 from utils import DateTimeExtractor
 from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLineEdit, QPushButton, QListWidget, QFrame,
@@ -288,6 +289,10 @@ class ModernSmartTodo(QMainWindow):
             time_info = override_time or ""
         else:
             text, date_info, time_info = DateTimeExtractor.extract(text)
+        
+        # Ensure date_info always has a value (defaulting to today)
+        if not date_info:
+            date_info = datetime.now().strftime('%b %d, %Y')
         
         # Capitalize the first letter for a cleaner look
         formatedText = text[0].upper() + text[1:] if text else ""
