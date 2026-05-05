@@ -24,7 +24,7 @@ class TaskCategorizer:
     # The train method is in train_model/task_categorizer.py for retraining
 
 # Initialize the classifier
-MODEL_PATH = Path(__file__).parent / "models" / "task_classifier.pkl"
+MODEL_PATH = Path(__file__).parent.parent / "models" / "task_classifier.pkl"
 task_classifier = TaskCategorizer(str(MODEL_PATH))
 
 # Add a wrapper method to keep compatibility with app.py 

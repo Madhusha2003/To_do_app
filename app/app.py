@@ -4,7 +4,7 @@ import re
 import requests
 import dateparser
 from datetime import datetime
-from utils import DateTimeExtractor
+from core.utils import DateTimeExtractor
 from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen, QWidget, QVBoxLayout, 
                              QHBoxLayout, QLineEdit, QPushButton, QListWidget, QFrame,
                              QListWidgetItem, QGraphicsDropShadowEffect, QDialog, QRadioButton, QButtonGroup, QFormLayout, QComboBox, QMessageBox)
@@ -22,18 +22,18 @@ class AILoaderThread(QThread):
     def run(self):
         # 1. Load Logistic Regression Categorizer
         self.progress_update.emit("Loading Logistic Brain...")
-        from categorizer import task_classifier
+        from core.categorizer import task_classifier
         
         # 2. Finish
         self.progress_update.emit("All systems ready!")
         self.loading_finished.emit(task_classifier)
 
 # import custom widgets
-from task_card import TaskCard
-from data_manager import load_ai_config, save_ai_config
-from ai_service import AIService, build_chat_prompt, build_task_prompt
-from ai_settings_window import AIPanelDialog
-from nova_window import NovaResponseDialog
+from ui.task_card import TaskCard
+from core.data_manager import load_ai_config, save_ai_config
+from core.ai_service import AIService, build_chat_prompt, build_task_prompt
+from ui.ai_settings_window import AIPanelDialog
+from ui.nova_window import NovaResponseDialog
 
 
 class ModernSmartTodo(QMainWindow):
@@ -169,7 +169,7 @@ class ModernSmartTodo(QMainWindow):
         self.input_field.setGraphicsEffect(shadow)
 
     def update_ui_for_mode(self):
-        from data_manager import load_ai_config
+        from core.data_manager import load_ai_config
         config = load_ai_config()
         self.cat_mode = config.get("categorizer_mode", "ML")
         
@@ -199,7 +199,7 @@ class ModernSmartTodo(QMainWindow):
             self.add_task_logic(text)
 
     def process_nova_chat(self, text):
-        from data_manager import load_ai_config
+        from core.data_manager import load_ai_config
         config = load_ai_config()
         service = AIService(config)
         
@@ -225,7 +225,7 @@ class ModernSmartTodo(QMainWindow):
         self.input_field.clear()
 
     def process_nova_task(self, text):
-        from data_manager import load_ai_config
+        from core.data_manager import load_ai_config
         import json
         import re
 
@@ -321,7 +321,7 @@ class ModernSmartTodo(QMainWindow):
             
     def save_current_tasks(self):
         try:
-            from data_manager import save_tasks
+            from core.data_manager import save_tasks
             tasks_data = []
             for i in range(self.task_list.count()):
                 item = self.task_list.item(i)
@@ -366,7 +366,7 @@ class ModernSmartTodo(QMainWindow):
         return super().styleSheet()
     
 def load_stylesheet():
-    style_file = Path(__file__).parent / "style.qss"
+    style_file = Path(__file__).parent / "ui" / "style.qss"
     if style_file.exists():
         return style_file.read_text()
     print(f"Warning: {style_file} not found!")
@@ -402,7 +402,7 @@ if __name__ == "__main__":
         app.setStyleSheet(style)
         
         # Load Tasks
-        from data_manager import load_tasks
+        from core.data_manager import load_tasks
         saved_tasks = load_tasks()
         # the list populates via insert(0, ...), so load in reverse so the original top item is inserted last and physically remains on top!
         for task_data in reversed(saved_tasks):

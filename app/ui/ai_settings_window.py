@@ -1,6 +1,6 @@
 import requests
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QRadioButton, QButtonGroup, QLabel, QFormLayout, QComboBox, QLineEdit, QPushButton, QMessageBox, QApplication)
-from data_manager import load_ai_config, save_ai_config
+from core.data_manager import load_ai_config, save_ai_config
 
 class AIPanelDialog(QDialog):
     def __init__(self, parent=None):
