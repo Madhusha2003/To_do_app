@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import sys
 import re
 import requests
@@ -28,10 +29,10 @@ class AILoaderThread(QThread):
         self.progress_update.emit("All systems ready!")
         self.loading_finished.emit(task_classifier)
 
-# import custom widgets
 from ui.task_card import TaskCard
 from core.data_manager import load_ai_config, save_ai_config
 from core.ai_service import AIService, build_chat_prompt, build_task_prompt
+from core.rag_service import RAGService
 from ui.ai_settings_window import AIPanelDialog
 from ui.nova_window import NovaResponseDialog
 
@@ -42,6 +43,11 @@ class ModernSmartTodo(QMainWindow):
 
         self.setWindowTitle("ToDo Buddy Pro")
         self.resize(500, 700)
+        
+        # Initialize Services
+        from core.data_manager import load_ai_config
+        config = load_ai_config()
+        self.rag_service = RAGService(config)
 
         # Main Setup
         self.central_widget = QWidget()
@@ -71,8 +77,26 @@ class ModernSmartTodo(QMainWindow):
             }
         """)
         
+        self.kb_btn = QPushButton("📚")
+        self.kb_btn.setToolTip("Open Knowledge Base Folder")
+        self.kb_btn.setCursor(Qt.PointingHandCursor)
+        self.kb_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                font-size: 20px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+                border-radius: 15px;
+            }
+        """)
+        self.kb_btn.clicked.connect(self.open_knowledge_base)
+        
         self.header_layout.addWidget(self.task_list_label)
         self.header_layout.addStretch()
+        self.header_layout.addWidget(self.kb_btn)
         self.header_layout.addWidget(self.settings_btn)
         
         self.main_layout.addLayout(self.header_layout)
@@ -202,24 +226,32 @@ class ModernSmartTodo(QMainWindow):
         from core.data_manager import load_ai_config
         config = load_ai_config()
         service = AIService(config)
-        
-        # Read current tasks to give context
+
+        # Collect current tasks for context
         tasks = []
         for i in range(self.task_list.count()):
             item = self.task_list.item(i)
             card = self.task_list.itemWidget(item)
             if card and hasattr(card, "to_dict"):
                 tasks.append(card.to_dict())
-                
+
         mode = config.get("mode", "online")
-        prompt = build_chat_prompt(tasks, mode=mode, user_prompt=text)
-        
+
+        # --- RAG: query BEFORE building prompt ---
+        rag_context = self.rag_service.query(text)
+        if rag_context:
+            print(f"[RAG] Context injected ({len(rag_context)} chars): {rag_context[:120]}...")
+        else:
+            print("[RAG] No context retrieved for this query.")
+
+        prompt = build_chat_prompt(tasks, mode=mode, user_prompt=text, rag_context=rag_context)
+
         self.statusBar().showMessage("Nova is thinking...")
         QApplication.processEvents()
-        
+
         response = service.ask(prompt)
-        self.statusBar().showMessage("AI Engine: Online | ToDo version 1.0")
-        
+        self.statusBar().showMessage(f"AI Engine: {mode.capitalize()} | ToDo version 1.0")
+
         dialog = NovaResponseDialog(self, response_text=response)
         dialog.exec()
         self.input_field.clear()
@@ -232,21 +264,25 @@ class ModernSmartTodo(QMainWindow):
         config = load_ai_config()
         mode = config.get("mode", "online")
         service = AIService(config)
-        
+
         extracted_date = ""
         extracted_time = ""
         ai_input_text = text
 
-        # If local mode, use our Python date parser instead of relying on AI
         if mode == "local":
             ai_input_text, extracted_date, extracted_time = DateTimeExtractor.extract(text)
             self.statusBar().showMessage("Nova (Local) is classifying...")
         else:
             self.statusBar().showMessage("Nova (Online) is classifying...")
-            
-        prompt = build_task_prompt(ai_input_text, mode=mode)
+
+        # RAG context for task classification (helps with custom category rules)
+        rag_context = self.rag_service.query(ai_input_text)
+        if rag_context:
+            print(f"[RAG] Task context injected ({len(rag_context)} chars)")
+
+        prompt = build_task_prompt(ai_input_text, mode=mode, rag_context=rag_context)
         QApplication.processEvents()
-        
+
         response = service.ask(prompt)
         self.statusBar().showMessage(f"AI Engine: {mode.capitalize()} | ToDo version 1.0")
         
@@ -258,6 +294,7 @@ class ModernSmartTodo(QMainWindow):
             
             category = data.get("category", "PERSONAL")
             task_name = data.get("task_name", ai_input_text)
+            priority = data.get("priority", "MEDIUM")
             
             # For online mode, use AI parsed dates. For local, use our extractor's dates.
             if mode == "online":
@@ -267,12 +304,12 @@ class ModernSmartTodo(QMainWindow):
                 date_info = extracted_date
                 time_info = extracted_time
                 
-            self.add_task_logic(task_name, override_category=category, override_date=date_info, override_time=time_info)
+            self.add_task_logic(task_name, override_category=category, override_date=date_info, override_time=time_info, override_priority=priority)
         except Exception as e:
             print("Failed to parse JSON:", e, "Response:", response)
             self.add_task_logic(text, override_category="PERSONAL")
 
-    def add_task_logic(self, text=None, override_category=None, override_date=None, override_time=None):
+    def add_task_logic(self, text=None, override_category=None, override_date=None, override_time=None, override_priority=None):
         if text is None:
             text = self.input_field.text().strip()
         if not text:
@@ -294,6 +331,8 @@ class ModernSmartTodo(QMainWindow):
         if not date_info:
             date_info = datetime.now().strftime('%b %d, %Y')
         
+        priority = override_priority or "MEDIUM"
+        
         # Capitalize the first letter for a cleaner look
         formatedText = text[0].upper() + text[1:] if text else ""
 
@@ -301,17 +340,43 @@ class ModernSmartTodo(QMainWindow):
         tags = [info for info in (date_info, time_info) if info]
         info_tag = f"[{' | '.join(tags)}] " if tags else ""
 
-        # Create TaskCard
-        self.card = TaskCard(formatedText, category, date_info, time_info)
+        self.card = TaskCard(formatedText, category, date_info, time_info, priority=priority)
         self.card.deleted.connect(self.delete_task) # Connect delete signal
+        self.card.file_attached.connect(self.index_file) # Connect RAG signal
+        self.card.changed.connect(self.save_current_tasks) # Connect auto-save
         self.item = QListWidgetItem()
         self.item.setSizeHint(self.card.sizeHint())
         self.task_list.insertItem(0, self.item)
         self.task_list.setItemWidget(self.item, self.card)
         self.input_field.clear()
         self.card.list_item = self.item 
-        self.save_current_tasks() # Auto-save
         
+        # Index the task itself for better RAG results
+        self.rag_service.index_task(formatedText, category)
+        
+        self.save_current_tasks() # Auto-save
+
+    def index_file(self, file_path, task_name=None):
+        display_name = os.path.basename(file_path)
+        self.statusBar().showMessage(f"Nova is indexing: {display_name}...")
+        QApplication.processEvents()
+        
+        # If task_name is provided, use it as context for the file
+        success = self.rag_service.add_document(file_path, task_context=task_name)
+        
+        if success:
+            self.statusBar().showMessage(f"'{display_name}' indexed successfully! ✓", 3000)
+        else:
+            self.statusBar().showMessage(f"Failed to index {display_name}.", 3000)
+
+    def open_knowledge_base(self):
+        """Open the knowledge_base folder and refresh index."""
+        kb_path = str(self.rag_service.knowledge_base_path)
+        os.startfile(kb_path)
+        self.statusBar().showMessage("Syncing knowledge base...", 2000)
+        self.rag_service.refresh_knowledge_base()
+        self.statusBar().showMessage("Knowledge Base synced! ✓", 3000)
+
     def delete_task(self, card):
         # Find item in list
         row = self.task_list.row(card.list_item)
@@ -347,16 +412,28 @@ class ModernSmartTodo(QMainWindow):
             category=data.get("category", ""),
             date_info=data.get("date_info", ""),
             time_info=data.get("time_info", ""),
+            priority=data.get("priority", "MEDIUM"),
             sub_items=data.get("sub_items", []),
             expanded=data.get("expanded", False)
         )
-        card.deleted.connect(self.delete_task) # Connect delete signal
+        card.deleted.connect(self.delete_task)
+        card.file_attached.connect(self.index_file)
+        card.changed.connect(self.save_current_tasks)
         item = QListWidgetItem()
         item.setSizeHint(card.sizeHint())
-        # To maintain the correct visual order from top-to-bottom after a reversed load
         self.task_list.insertItem(0, item)
         self.task_list.setItemWidget(item, card)
         card.list_item = item
+
+        # Re-index any attached files that aren't yet in the vector DB
+        for sub in data.get("sub_items", []):
+            fp = sub.get("file_path")
+            if fp and os.path.exists(fp):
+                print(f"[RAG System] Re-syncing task attachment: {os.path.basename(fp)}")
+                self.rag_service.add_document(fp, task_context=data.get("task_name"))
+        
+        # Also ensure the task itself is indexed
+        self.rag_service.index_task(data.get("task_name", ""), data.get("category", ""))
 
     def closeEvent(self, event):
         self.save_current_tasks()

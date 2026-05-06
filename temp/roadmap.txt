@@ -1,0 +1,11 @@
+Project Nova - Development Roadmap
+1. Core UI implementation - Done
+2. AI Service Integration - Done
+3. RAG System with Vector DB - In Progress
+4. Local Model Optimization - In Progress
+5. User Settings & Profiles - Planned
+
+Next Steps:
+- Refine local prompts for better JSON extraction.
+- Implement file watcher for Knowledge Base.
+- Add support for PDF parsing.
