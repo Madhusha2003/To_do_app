@@ -1,11 +1,13 @@
 from pathlib import Path
+import os
 import sys
 import re
 import requests
 import dateparser
-from utils import DateTimeExtractor
+from datetime import datetime
+from core.utils import DateTimeExtractor
 from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QSplashScreen, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QLineEdit, QPushButton, QListWidget, 
+                             QHBoxLayout, QLineEdit, QPushButton, QListWidget, QFrame,
                              QListWidgetItem, QGraphicsDropShadowEffect, QDialog, QRadioButton, QButtonGroup, QFormLayout, QComboBox, QMessageBox)
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QColor, QFont
@@ -21,18 +23,18 @@ class AILoaderThread(QThread):
     def run(self):
         # 1. Load Logistic Regression Categorizer
         self.progress_update.emit("Loading Logistic Brain...")
-        from categorizer import task_classifier
+        from core.categorizer import task_classifier
         
         # 2. Finish
         self.progress_update.emit("All systems ready!")
         self.loading_finished.emit(task_classifier)
 
-# import custom widgets
-from task_card import TaskCard
-from data_manager import load_ai_config, save_ai_config
-from ai_service import AIService, build_prompt
-from ai_settings_window import AIPanelDialog
-from nova_window import NovaResponseDialog
+from ui.task_card import TaskCard
+from core.data_manager import load_ai_config, save_ai_config
+from core.ai_service import AIService, build_chat_prompt, build_task_prompt
+from core.rag_service import RAGService
+from ui.ai_settings_window import AIPanelDialog
+from ui.nova_window import NovaResponseDialog
 
 
 class ModernSmartTodo(QMainWindow):
@@ -41,6 +43,11 @@ class ModernSmartTodo(QMainWindow):
 
         self.setWindowTitle("ToDo Buddy Pro")
         self.resize(500, 700)
+        
+        # Initialize Services
+        from core.data_manager import load_ai_config
+        config = load_ai_config()
+        self.rag_service = RAGService(config)
 
         # Main Setup
         self.central_widget = QWidget()
@@ -49,56 +56,13 @@ class ModernSmartTodo(QMainWindow):
         self.main_layout.setContentsMargins(25, 30, 25, 30)
         self.main_layout.setSpacing(10)
 
-        # --- Task List ---
+        # --- Header ---
+        self.header_layout = QHBoxLayout()
         self.task_list_label = QLabel("Your Tasks")
         self.task_list_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
-        self.task_list = QListWidget()
-        self.task_list.setSpacing(10) # Space between tasks
-        self.main_layout.addWidget(self.task_list_label)
-        self.main_layout.addWidget(self.task_list, stretch=1)
-
-        # --- Input Section (Horizontal) ---
-        self.input_container = QHBoxLayout()
-        self.input_container.setContentsMargins(0, 0, 0, 0)
-        self.input_container.setSpacing(0) # Join the input and button
-
-        self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Try: Finish report by Friday 5pm")
         
-        self.add_button = QPushButton("ADD")
-        self.add_button.setObjectName("AddBtn") # Used for specific QSS styling
-        self.add_button.setCursor(Qt.PointingHandCursor)
-
-        self.input_container.addWidget(self.input_field)
-        self.input_container.addWidget(self.add_button)
-        
-        self.main_layout.addLayout(self.input_container)
-
-        # --- Assistant Section ---
-        self.assistant_layout = QHBoxLayout()
-        self.assistant_layout.setContentsMargins(0, 0, 0, 0)
-        self.assistant_layout.setSpacing(10)
-        
-        self.ai_input = QLineEdit()
-        self.ai_input.setPlaceholderText("Ask Nova about your tasks...")
-        
-        self.ask_nova_btn = QPushButton("✨ Ask")
-        self.ask_nova_btn.setCursor(Qt.PointingHandCursor)
-        self.ask_nova_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #6c5ce7;
-                color: white;
-                border-radius: 15px;
-                padding: 8px 20px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #a29bfe;
-            }
-        """)
-
         self.settings_btn = QPushButton("⚙️")
-        self.settings_btn.setToolTip("AI Settings")
+        self.settings_btn.setToolTip("App Settings")
         self.settings_btn.setCursor(Qt.PointingHandCursor)
         self.settings_btn.setStyleSheet("""
             QPushButton {
@@ -113,16 +77,114 @@ class ModernSmartTodo(QMainWindow):
             }
         """)
         
-        self.assistant_layout.addWidget(self.ai_input, stretch=1)
-        self.assistant_layout.addWidget(self.ask_nova_btn)
-        self.assistant_layout.addWidget(self.settings_btn)
-        self.main_layout.addLayout(self.assistant_layout)
+        self.kb_btn = QPushButton("📚")
+        self.kb_btn.setToolTip("Open Knowledge Base Folder")
+        self.kb_btn.setCursor(Qt.PointingHandCursor)
+        self.kb_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                font-size: 20px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+                border-radius: 15px;
+            }
+        """)
+        self.kb_btn.clicked.connect(self.open_knowledge_base)
+        
+        self.header_layout.addWidget(self.task_list_label)
+        self.header_layout.addStretch()
+        self.header_layout.addWidget(self.kb_btn)
+        self.header_layout.addWidget(self.settings_btn)
+        
+        self.main_layout.addLayout(self.header_layout)
+
+        # --- Task List ---
+        self.task_list = QListWidget()
+        self.task_list.setSpacing(10) # Space between tasks
+        self.main_layout.addWidget(self.task_list, stretch=1)
+
+        # --- Modern Input Bar ---
+        self.input_frame = QFrame()
+        self.input_frame.setObjectName("ModernInputBar")
+        self.input_frame.setStyleSheet("""
+            QFrame#ModernInputBar {
+                background-color: #2d3436;
+                border-radius: 25px;
+                border: 1px solid #636e72;
+            }
+        """)
+        
+        # Shadow for the input frame
+        shadow = QGraphicsDropShadowEffect(blurRadius=15, xOffset=0, yOffset=5)
+        shadow.setColor(QColor(0, 0, 0, 40))
+        self.input_frame.setGraphicsEffect(shadow)
+
+        self.input_container = QHBoxLayout(self.input_frame)
+        self.input_container.setContentsMargins(15, 5, 5, 5) # Left padding for combobox, small margins elsewhere
+        self.input_container.setSpacing(10)
+
+        # Mode Selector
+        self.mode_selector = QComboBox()
+        self.mode_selector.addItems(["General Chat", "Add Task"])
+        self.mode_selector.setCursor(Qt.PointingHandCursor)
+        self.mode_selector.setStyleSheet("""
+            QComboBox {
+                background: transparent;
+                color: #dfe6e9;
+                border: none;
+                font-weight: bold;
+                padding-right: 15px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #2d3436;
+                color: white;
+                selection-background-color: #636e72;
+                border-radius: 5px;
+            }
+        """)
+
+        self.input_field = QLineEdit()
+        self.input_field.setStyleSheet("""
+            QLineEdit {
+                background: transparent;
+                border: none;
+                color: white;
+                font-size: 14px;
+            }
+        """)
+
+        self.add_button = QPushButton("⬆️")
+        self.add_button.setCursor(Qt.PointingHandCursor)
+        self.add_button.setFixedSize(40, 40)
+        self.add_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0984e3;
+                color: white;
+                border-radius: 20px;
+                font-size: 18px;
+            }
+            QPushButton:hover {
+                background-color: #74b9ff;
+            }
+        """)
+
+        self.input_container.addWidget(self.mode_selector)
+        self.input_container.addWidget(self.input_field)
+        self.input_container.addWidget(self.add_button)
+        
+        self.main_layout.addWidget(self.input_frame)
+
+        self.update_ui_for_mode()
 
         # --- Logic Connections ---
-        self.input_field.returnPressed.connect(self.add_task_logic)
-        self.add_button.clicked.connect(self.add_task_logic)
-        self.ai_input.returnPressed.connect(self.ask_nova)
-        self.ask_nova_btn.clicked.connect(self.ask_nova)
+        self.input_field.returnPressed.connect(self.process_input)
+        self.add_button.clicked.connect(self.process_input)
         self.settings_btn.clicked.connect(self.open_settings)
 
         # Subtle Shadow for the input bar
@@ -130,55 +192,146 @@ class ModernSmartTodo(QMainWindow):
         shadow.setColor(QColor(0, 0, 0, 15))
         self.input_field.setGraphicsEffect(shadow)
 
+    def update_ui_for_mode(self):
+        from core.data_manager import load_ai_config
+        config = load_ai_config()
+        self.cat_mode = config.get("categorizer_mode", "ML")
+        
+        if self.cat_mode == "Nova":
+            self.input_field.setPlaceholderText("Message Nova...")
+            self.mode_selector.show()
+        else:
+            self.input_field.setPlaceholderText("Try: Finish report by Friday 5pm")
+            self.mode_selector.hide()
+
     def open_settings(self):
         dialog = AIPanelDialog(self)
         dialog.exec()
+        self.update_ui_for_mode()
 
-    def ask_nova(self):
-        user_prompt = self.ai_input.text().strip()
-        if not user_prompt:
-            user_prompt = "Tell me what to do today and why in a short, encouraging message."
+    def process_input(self, checked=False):
+        text = self.input_field.text().strip()
+        if not text:
+            return
             
-        from data_manager import load_ai_config
+        if self.cat_mode == "Nova":
+            if self.mode_selector.currentText() == "General Chat":
+                self.process_nova_chat(text)
+            else:
+                self.process_nova_task(text)
+        else:
+            self.add_task_logic(text)
+
+    def process_nova_chat(self, text):
+        from core.data_manager import load_ai_config
         config = load_ai_config()
-        
-        # Read current tasks from the UI
+        service = AIService(config)
+
+        # Collect current tasks for context
         tasks = []
         for i in range(self.task_list.count()):
             item = self.task_list.item(i)
             card = self.task_list.itemWidget(item)
             if card and hasattr(card, "to_dict"):
                 tasks.append(card.to_dict())
-                
-        prompt = build_prompt(tasks, user_prompt)
-        service = AIService(config)
-        
-        # Simple synchronous call for now as requested
+
+        mode = config.get("mode", "online")
+
+        # --- RAG: query BEFORE building prompt ---
+        rag_context = self.rag_service.query(text)
+        if rag_context:
+            print(f"[RAG] Context injected ({len(rag_context)} chars): {rag_context[:120]}...")
+        else:
+            print("[RAG] No context retrieved for this query.")
+
+        prompt = build_chat_prompt(tasks, mode=mode, user_prompt=text, rag_context=rag_context)
+
         self.statusBar().showMessage("Nova is thinking...")
-        QApplication.processEvents() # Force UI update
-        
+        QApplication.processEvents()
+
         response = service.ask(prompt)
-        
-        self.statusBar().showMessage("AI Engine: Online | ToDo version 1.0")
-        
-        # Display the response in the new Nova window
+        self.statusBar().showMessage(f"AI Engine: {mode.capitalize()} | ToDo version 1.0")
+
         dialog = NovaResponseDialog(self, response_text=response)
         dialog.exec()
-        
-        self.ai_input.clear()
+        self.input_field.clear()
 
-    def add_task_logic(self):
-        text = self.input_field.text().strip()
+    def process_nova_task(self, text):
+        from core.data_manager import load_ai_config
+        import json
+        import re
+
+        config = load_ai_config()
+        mode = config.get("mode", "online")
+        service = AIService(config)
+
+        extracted_date = ""
+        extracted_time = ""
+        ai_input_text = text
+
+        if mode == "local":
+            ai_input_text, extracted_date, extracted_time = DateTimeExtractor.extract(text)
+            self.statusBar().showMessage("Nova (Local) is classifying...")
+        else:
+            self.statusBar().showMessage("Nova (Online) is classifying...")
+
+        # RAG context for task classification (helps with custom category rules)
+        rag_context = self.rag_service.query(ai_input_text)
+        if rag_context:
+            print(f"[RAG] Task context injected ({len(rag_context)} chars)")
+
+        prompt = build_task_prompt(ai_input_text, mode=mode, rag_context=rag_context)
+        QApplication.processEvents()
+
+        response = service.ask(prompt)
+        self.statusBar().showMessage(f"AI Engine: {mode.capitalize()} | ToDo version 1.0")
+        
+        try:
+            match = re.search(r'\{.*\}', response, re.DOTALL)
+            if match:
+                response = match.group(0)
+            data = json.loads(response)
+            
+            category = data.get("category", "PERSONAL")
+            task_name = data.get("task_name", ai_input_text)
+            priority = data.get("priority", "MEDIUM")
+            
+            # For online mode, use AI parsed dates. For local, use our extractor's dates.
+            if mode == "online":
+                date_info = data.get("date_info", "")
+                time_info = data.get("time_info", "")
+            else:
+                date_info = extracted_date
+                time_info = extracted_time
+                
+            self.add_task_logic(task_name, override_category=category, override_date=date_info, override_time=time_info, override_priority=priority)
+        except Exception as e:
+            print("Failed to parse JSON:", e, "Response:", response)
+            self.add_task_logic(text, override_category="PERSONAL")
+
+    def add_task_logic(self, text=None, override_category=None, override_date=None, override_time=None, override_priority=None):
+        if text is None:
+            text = self.input_field.text().strip()
         if not text:
             return
         
         # find category info if classifier exists
-        category = "PERSONAL"
-        if hasattr(self, "task_classifier"):
-            category = self.text_category_classifier() or "PERSONAL"
+        category = override_category or "PERSONAL"
+        if not override_category and hasattr(self, "task_classifier"):
+            category = self.text_category_classifier(text) or "PERSONAL"
 
-        # Extract date and time information using utility function
-        text, date_info, time_info = DateTimeExtractor.extract(text)
+        # Extract date and time information using utility function or use overrides
+        if override_date is not None or override_time is not None:
+            date_info = override_date or ""
+            time_info = override_time or ""
+        else:
+            text, date_info, time_info = DateTimeExtractor.extract(text)
+        
+        # Ensure date_info always has a value (defaulting to today)
+        if not date_info:
+            date_info = datetime.now().strftime('%b %d, %Y')
+        
+        priority = override_priority or "MEDIUM"
         
         # Capitalize the first letter for a cleaner look
         formatedText = text[0].upper() + text[1:] if text else ""
@@ -187,17 +340,43 @@ class ModernSmartTodo(QMainWindow):
         tags = [info for info in (date_info, time_info) if info]
         info_tag = f"[{' | '.join(tags)}] " if tags else ""
 
-        # Create TaskCard
-        self.card = TaskCard(formatedText, category, date_info, time_info)
+        self.card = TaskCard(formatedText, category, date_info, time_info, priority=priority)
         self.card.deleted.connect(self.delete_task) # Connect delete signal
+        self.card.file_attached.connect(self.index_file) # Connect RAG signal
+        self.card.changed.connect(self.save_current_tasks) # Connect auto-save
         self.item = QListWidgetItem()
         self.item.setSizeHint(self.card.sizeHint())
         self.task_list.insertItem(0, self.item)
         self.task_list.setItemWidget(self.item, self.card)
         self.input_field.clear()
         self.card.list_item = self.item 
-        self.save_current_tasks() # Auto-save
         
+        # Index the task itself for better RAG results
+        self.rag_service.index_task(formatedText, category)
+        
+        self.save_current_tasks() # Auto-save
+
+    def index_file(self, file_path, task_name=None):
+        display_name = os.path.basename(file_path)
+        self.statusBar().showMessage(f"Nova is indexing: {display_name}...")
+        QApplication.processEvents()
+        
+        # If task_name is provided, use it as context for the file
+        success = self.rag_service.add_document(file_path, task_context=task_name)
+        
+        if success:
+            self.statusBar().showMessage(f"'{display_name}' indexed successfully! ✓", 3000)
+        else:
+            self.statusBar().showMessage(f"Failed to index {display_name}.", 3000)
+
+    def open_knowledge_base(self):
+        """Open the knowledge_base folder and refresh index."""
+        kb_path = str(self.rag_service.knowledge_base_path)
+        os.startfile(kb_path)
+        self.statusBar().showMessage("Syncing knowledge base...", 2000)
+        self.rag_service.refresh_knowledge_base()
+        self.statusBar().showMessage("Knowledge Base synced! ✓", 3000)
+
     def delete_task(self, card):
         # Find item in list
         row = self.task_list.row(card.list_item)
@@ -207,7 +386,7 @@ class ModernSmartTodo(QMainWindow):
             
     def save_current_tasks(self):
         try:
-            from data_manager import save_tasks
+            from core.data_manager import save_tasks
             tasks_data = []
             for i in range(self.task_list.count()):
                 item = self.task_list.item(i)
@@ -218,8 +397,7 @@ class ModernSmartTodo(QMainWindow):
         except Exception as e:
             print(f"Failed to save tasks: {e}")
         
-    def text_category_classifier(self):
-        text = self.input_field.text().strip()
+    def text_category_classifier(self, text):
         lower_text = text.lower()
         category = self.task_classifier.classify(lower_text) or "PERSONAL"
         if category.upper() in categories:
@@ -234,16 +412,28 @@ class ModernSmartTodo(QMainWindow):
             category=data.get("category", ""),
             date_info=data.get("date_info", ""),
             time_info=data.get("time_info", ""),
+            priority=data.get("priority", "MEDIUM"),
             sub_items=data.get("sub_items", []),
             expanded=data.get("expanded", False)
         )
-        card.deleted.connect(self.delete_task) # Connect delete signal
+        card.deleted.connect(self.delete_task)
+        card.file_attached.connect(self.index_file)
+        card.changed.connect(self.save_current_tasks)
         item = QListWidgetItem()
         item.setSizeHint(card.sizeHint())
-        # To maintain the correct visual order from top-to-bottom after a reversed load
         self.task_list.insertItem(0, item)
         self.task_list.setItemWidget(item, card)
         card.list_item = item
+
+        # Re-index any attached files that aren't yet in the vector DB
+        for sub in data.get("sub_items", []):
+            fp = sub.get("file_path")
+            if fp and os.path.exists(fp):
+                print(f"[RAG System] Re-syncing task attachment: {os.path.basename(fp)}")
+                self.rag_service.add_document(fp, task_context=data.get("task_name"))
+        
+        # Also ensure the task itself is indexed
+        self.rag_service.index_task(data.get("task_name", ""), data.get("category", ""))
 
     def closeEvent(self, event):
         self.save_current_tasks()
@@ -253,7 +443,7 @@ class ModernSmartTodo(QMainWindow):
         return super().styleSheet()
     
 def load_stylesheet():
-    style_file = Path(__file__).parent / "style.qss"
+    style_file = Path(__file__).parent / "ui" / "style.qss"
     if style_file.exists():
         return style_file.read_text()
     print(f"Warning: {style_file} not found!")
@@ -289,7 +479,7 @@ if __name__ == "__main__":
         app.setStyleSheet(style)
         
         # Load Tasks
-        from data_manager import load_tasks
+        from core.data_manager import load_tasks
         saved_tasks = load_tasks()
         # the list populates via insert(0, ...), so load in reverse so the original top item is inserted last and physically remains on top!
         for task_data in reversed(saved_tasks):

@@ -1,5 +1,6 @@
 import re
 import dateparser
+from datetime import datetime
 
 class DateTimeExtractor:
     @staticmethod
@@ -37,6 +38,10 @@ class DateTimeExtractor:
             
             # Remove extracted date from text
             text = text.replace(date_str, "")
+
+        # Default to today if no date info found in input
+        if not date_info:
+            date_info = datetime.now().strftime('%b %d, %Y')
 
         # 3. Clean up the remaining text
         # Removes stray spaces and dangling commas left behind (e.g., "Finish report ,  " -> "Finish report")

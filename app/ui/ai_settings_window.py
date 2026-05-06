@@ -1,6 +1,6 @@
 import requests
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QRadioButton, QButtonGroup, QLabel, QFormLayout, QComboBox, QLineEdit, QPushButton, QMessageBox, QApplication)
-from data_manager import load_ai_config, save_ai_config
+from core.data_manager import load_ai_config, save_ai_config
 
 class AIPanelDialog(QDialog):
     def __init__(self, parent=None):
@@ -11,35 +11,43 @@ class AIPanelDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
+        # Categorizer Mode Group
+        self.cat_group = QButtonGroup(self)
+        self.ml_radio = QRadioButton("Simple Categorizer (ML Model)")
+        self.nova_radio = QRadioButton("LLM Categorizer (Nova)")
+        self.cat_group.addButton(self.ml_radio)
+        self.cat_group.addButton(self.nova_radio)
+        
+        cat_mode = self.config.get("categorizer_mode", "ML")
+        if cat_mode == "Nova":
+            self.nova_radio.setChecked(True)
+        else:
+            self.ml_radio.setChecked(True)
+
+        layout.addWidget(QLabel("<b>App Mode:</b>"))
+        layout.addWidget(self.ml_radio)
+        layout.addWidget(self.nova_radio)
+        
+        # Horizontal line
+        line = QLabel()
+        line.setStyleSheet("border-bottom: 1px solid #ccc; margin: 10px 0;")
+        layout.addWidget(line)
+
+        # Provider Mode Group
         self.mode_group = QButtonGroup(self)
         self.local_radio = QRadioButton("Local (Ollama)")
         self.online_radio = QRadioButton("Online (Gemini)")
         self.mode_group.addButton(self.local_radio)
         self.mode_group.addButton(self.online_radio)
-
+        
         if self.config.get("mode") == "local":
             self.local_radio.setChecked(True)
-            self.info_label = QLabel("""
-            Local Mode:
-            - Uses Ollama on your PC
-            - Requires installed model
-            """)
-            self.info_label.setStyleSheet("color: gray; font-size: 10px;")
-            layout.insertWidget(0, self.info_label)
         else:
             self.online_radio.setChecked(True)
-            self.info_label = QLabel("""
-            Online Mode:
-            - Uses Gemini API
-            - Requires API key
-            """)
-            self.info_label.setStyleSheet("color: gray; font-size: 10px;")
-            layout.insertWidget(0, self.info_label)
-            
-        layout.addWidget(QLabel("Mode:"))
+
+        layout.addWidget(QLabel("<b>Nova AI Provider:</b>"))
         layout.addWidget(self.local_radio)
         layout.addWidget(self.online_radio)
-        layout.addWidget(self.info_label)
 
         self.form_layout = QFormLayout()
         
@@ -147,6 +155,7 @@ class AIPanelDialog(QDialog):
             self.online_model_combo.addItem(f"Network Error")
 
     def save_settings(self):
+        self.config["categorizer_mode"] = "Nova" if self.nova_radio.isChecked() else "ML"
         self.config["mode"] = "local" if self.local_radio.isChecked() else "online"
         
         if self.config["mode"] == "local":
@@ -154,8 +163,12 @@ class AIPanelDialog(QDialog):
         else:
             self.config["model"] = self.online_model_combo.currentText()
             
+        if not self.config["model"] or self.config["model"] == "No models found.":
+            QMessageBox.warning(self, "Warning", "Please select a valid model before saving.")
+            return
+
         self.config["api_key"] = self.api_key_input.text()
         self.config["provider"] = self.provider_combo.currentText()
         save_ai_config(self.config)
-        QMessageBox.information(self, "Saved", "Settings saved successfully!")
+        QMessageBox.information(self, "Saved", "Settings saved successfully! Restart app to apply some changes.")
         self.accept()
